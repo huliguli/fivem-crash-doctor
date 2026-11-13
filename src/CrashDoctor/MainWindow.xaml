@@ -1,0 +1,404 @@
+<Window x:Class="CrashDoctor.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="FiveM Crash Doctor" Width="1280" Height="820" MinWidth="1000" MinHeight="640"
+        WindowStartupLocation="CenterScreen" Background="{StaticResource BgBrush}"
+        Foreground="{StaticResource TextBrush}" FontFamily="{StaticResource UiFont}" FontSize="13"
+        AllowDrop="True" UseLayoutRounding="True" TextOptions.TextFormattingMode="Display"
+        Icon="Assets/app.ico">
+
+    <Window.Resources>
+        <!-- Diagnose-Karte -->
+        <DataTemplate x:Key="DiagnosisTemplate">
+            <Border Style="{StaticResource Card}" Padding="0" Margin="0,0,0,10">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="4" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Border Background="{Binding SeverityBrush}" CornerRadius="10,0,0,10" />
+                    <StackPanel Grid.Column="1" Margin="16,14,16,14">
+                        <!-- Kopf: klickbar zum Auf- und Zuklappen -->
+                        <Button Command="{Binding Toggle}" Cursor="Hand" Background="Transparent" BorderThickness="0" Padding="0"
+                                HorizontalContentAlignment="Stretch" FocusVisualStyle="{StaticResource FocusVisual}"
+                                AutomationProperties.Name="{Binding Title}">
+                            <Button.Template>
+                                <ControlTemplate TargetType="Button">
+                                    <ContentPresenter />
+                                </ControlTemplate>
+                            </Button.Template>
+                            <Grid Background="Transparent">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel>
+                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                        <Border Style="{StaticResource Pill}" Background="{Binding SeveritySoftBrush}">
+                                            <TextBlock Text="{Binding SeverityText}" Foreground="{Binding SeverityBrush}" FontSize="11" FontWeight="SemiBold" />
+                                        </Border>
+                                        <TextBlock Text="{Binding ConfidenceText}" Style="{StaticResource Label}" Margin="10,0,0,0" VerticalAlignment="Center" />
+                                        <TextBlock Text="·" Style="{StaticResource Label}" Margin="6,0" VerticalAlignment="Center" />
+                                        <TextBlock Text="{Binding EvidenceText}" Style="{StaticResource Label}" VerticalAlignment="Center"
+                                                   ToolTip="{Binding EvidenceTooltip}" TextDecorations="Underline" Cursor="Help" />
+                                    </StackPanel>
+                                    <TextBlock Text="{Binding Title}" Style="{StaticResource H2}" FontSize="16" />
+                                </StackPanel>
+                                <TextBlock Grid.Column="1" Text="{Binding Chevron}" Style="{StaticResource Icon}" Foreground="{StaticResource FaintBrush}" Margin="12,0,0,0" VerticalAlignment="Top" />
+                            </Grid>
+                        </Button>
+
+                        <StackPanel Visibility="{Binding BodyVisibility}" Margin="0,10,0,0">
+                            <TextBlock Text="{Binding Explanation}" Style="{StaticResource Body}" Foreground="{StaticResource MutedBrush}" />
+
+                            <ItemsControl ItemsSource="{Binding Steps}" Margin="0,12,0,0" Visibility="{Binding StepsVisibility}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Grid Margin="0,0,0,6">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="24" />
+                                                <ColumnDefinition Width="*" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Text="{Binding Number}" Foreground="{StaticResource AccentBrush}" FontWeight="SemiBold" FontSize="13.5" />
+                                            <TextBlock Grid.Column="1" Text="{Binding Text}" Style="{StaticResource Body}" />
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+
+                            <ItemsControl ItemsSource="{Binding Fixes}" Margin="0,8,0,0" Visibility="{Binding FixesVisibility}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <WrapPanel />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <StackPanel Margin="0,4,8,4" MaxWidth="520">
+                                            <Button Style="{StaticResource FixButton}" Command="{Binding Command}" CommandParameter="{Binding}"
+                                                    IsEnabled="{Binding IsIdle}" ToolTip="{Binding Tooltip}" HorizontalAlignment="Left">
+                                                <StackPanel Orientation="Horizontal">
+                                                    <TextBlock Text="{Binding Label}" />
+                                                    <Border Visibility="{Binding AdminVisibility}" Background="#1F3B2E" CornerRadius="4" Padding="5,0" Margin="8,0,0,0">
+                                                        <StackPanel Orientation="Horizontal">
+                                                            <TextBlock Text="&#xEA18;" Style="{StaticResource Icon}" FontSize="10" Margin="0,0,3,0" />
+                                                            <TextBlock Text="Admin" FontSize="10.5" VerticalAlignment="Center" />
+                                                        </StackPanel>
+                                                    </Border>
+                                                </StackPanel>
+                                            </Button>
+                                            <TextBlock Text="{Binding Status}" Foreground="{Binding StatusBrush}" Visibility="{Binding StatusVisibility}"
+                                                       Style="{StaticResource Muted}" Margin="2,4,0,0" />
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+
+                            <TextBlock Text="{Binding MatchedText}" Visibility="{Binding MatchedVisibility}" Style="{StaticResource Muted}"
+                                       Foreground="{StaticResource FaintBrush}" FontSize="11.5" Margin="0,10,0,0" />
+                        </StackPanel>
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </DataTemplate>
+
+        <DataTemplate x:Key="KeyValueTemplate">
+            <Grid Margin="0,0,0,7">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="190" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="{Binding Key}" Foreground="{StaticResource FaintBrush}" TextWrapping="Wrap" Margin="0,0,12,0" />
+                <TextBox Grid.Column="1" Text="{Binding Value, Mode=OneWay}" IsReadOnly="True" BorderThickness="0" Background="Transparent"
+                         Padding="0" TextWrapping="Wrap" FontSize="13" />
+            </Grid>
+        </DataTemplate>
+    </Window.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!-- Kopfzeile -->
+        <Border BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1" Padding="20,12">
+            <DockPanel LastChildFill="False">
+                <StackPanel Orientation="Horizontal" DockPanel.Dock="Left">
+                    <Border Width="30" Height="30" CornerRadius="7" Background="{StaticResource AccentBrush}">
+                        <Path Data="M4,16.5 L10.8,16.5 L13.5,8.4 L17.1,22.8 L19.8,14.4 L25.8,14.4" Stroke="#0A1E16" StrokeThickness="2.6"
+                              StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
+                    </Border>
+                    <StackPanel Margin="12,0,0,0" VerticalAlignment="Center">
+                        <TextBlock Text="FiveM Crash Doctor" Style="{StaticResource H2}" FontSize="16" />
+                        <TextBlock Text="Absturz einfügen, Ursache verstehen, beheben." Style="{StaticResource Muted}" FontSize="12" />
+                    </StackPanel>
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" DockPanel.Dock="Right" VerticalAlignment="Center">
+                    <Border x:Name="AdminChip" Style="{StaticResource Pill}" Background="{StaticResource Surface2Brush}" Padding="10,4">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock x:Name="AdminIcon" Text="&#xEA18;" Style="{StaticResource Icon}" FontSize="12" Foreground="{StaticResource FaintBrush}" />
+                            <TextBlock x:Name="AdminText" Text="Ohne Admin-Rechte" Margin="6,0,0,0" Foreground="{StaticResource MutedBrush}" FontSize="12" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Border>
+                    <Button x:Name="RestartAdminButton" Style="{StaticResource GhostButton}" Margin="8,0,0,0" Click="RestartAdmin_Click"
+                            ToolTip="Nötig ist das nicht: Reparaturen fragen einzeln nach Admin-Rechten. Mit Admin-Rechten laufen alle ohne Rückfrage.">
+                        <TextBlock Text="Als Admin neu starten" FontSize="12" />
+                    </Button>
+                </StackPanel>
+            </DockPanel>
+        </Border>
+
+        <Grid Grid.Row="1" Margin="20,16,20,16">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="400" />
+                <ColumnDefinition Width="20" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <!-- Linke Spalte: Eingabe -->
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <Border Style="{StaticResource Card}">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <StackPanel>
+                            <TextBlock Text="1 · Crash-Text" Style="{StaticResource H2}" />
+                            <TextBlock Style="{StaticResource Muted}" Margin="0,2,0,10"
+                                       Text="Im FiveM-Fehlerfenster Strg+C drücken und hier mit Strg+V einfügen. Auch Text aus Discord oder dem Log geht." />
+                        </StackPanel>
+                        <Grid Grid.Row="1">
+                            <TextBox x:Name="CrashText" AcceptsReturn="True" AcceptsTab="False" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto"
+                                     FontFamily="{StaticResource MonoFont}" FontSize="12" TextChanged="CrashText_TextChanged"
+                                     AutomationProperties.Name="Crash-Text" />
+                            <TextBlock x:Name="CrashTextPlaceholder" IsHitTestVisible="False" Margin="12,10" FontFamily="{StaticResource MonoFont}" FontSize="12"
+                                       Foreground="{StaticResource FaintBrush}" TextWrapping="Wrap"
+                                       Text="An error at GTA5_b3095.exe+16B5F3A caused FiveM to stop working …&#x0a;Legacy crash hash: …&#x0a;Crash signature: …" />
+                        </Grid>
+                        <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,10,0,0">
+                            <Button Style="{StaticResource SecondaryButton}" Click="Paste_Click" Padding="12,6">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="&#xE77F;" Style="{StaticResource Icon}" Margin="0,0,8,0" />
+                                    <TextBlock Text="Einfügen" />
+                                </StackPanel>
+                            </Button>
+                            <Button Style="{StaticResource GhostButton}" Click="ClearText_Click" Margin="6,0,0,0">
+                                <TextBlock Text="Leeren" />
+                            </Button>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <Border Grid.Row="1" Style="{StaticResource Card}" Margin="0,12,0,0">
+                    <StackPanel>
+                        <TextBlock Text="2 · Dateien (empfohlen)" Style="{StaticResource H2}" />
+                        <TextBlock Style="{StaticResource Muted}" Margin="0,2,0,10"
+                                   Text="Crash-Dump (.dmp), das Zip aus „Save information“ oder ein CitizenFX-Log. Mit Dump wird die Analyse deutlich genauer." />
+                        <Border x:Name="DropZone" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="8" Background="{StaticResource BgBrush}"
+                                Padding="12" MinHeight="64">
+                            <Grid>
+                                <TextBlock x:Name="DropHint" Style="{StaticResource Muted}" HorizontalAlignment="Center" VerticalAlignment="Center" TextAlignment="Center"
+                                           Text="Dateien hierher ziehen oder mit Strg+V einfügen" />
+                                <ItemsControl x:Name="FileList">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Grid Margin="0,2">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <StackPanel>
+                                                    <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" ToolTip="{Binding Path}" />
+                                                    <TextBlock Text="{Binding Info}" Style="{StaticResource Label}" FontWeight="Normal" />
+                                                </StackPanel>
+                                                <Button Grid.Column="1" Style="{StaticResource GhostButton}" Command="{Binding Remove}" Padding="6,4"
+                                                        ToolTip="Entfernen" AutomationProperties.Name="Datei entfernen">
+                                                    <TextBlock Text="&#xE711;" Style="{StaticResource Icon}" FontSize="11" />
+                                                </Button>
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </Grid>
+                        </Border>
+                        <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                            <Button Style="{StaticResource SecondaryButton}" Click="LatestCrash_Click" Padding="12,6"
+                                    ToolTip="Sucht den neuesten Dump in FiveM.app\crashes und das „Save information“-Zip im Temp-Ordner.">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="&#xE721;" Style="{StaticResource Icon}" Margin="0,0,8,0" />
+                                    <TextBlock Text="Neuesten Crash laden" />
+                                </StackPanel>
+                            </Button>
+                            <Button Style="{StaticResource GhostButton}" Click="ChooseFile_Click" Margin="6,0,0,0">
+                                <TextBlock Text="Datei wählen …" />
+                            </Button>
+                        </StackPanel>
+                        <TextBlock x:Name="LatestInfo" Style="{StaticResource Muted}" Margin="0,6,0,0" Visibility="Collapsed" />
+                    </StackPanel>
+                </Border>
+
+                <Button Grid.Row="2" x:Name="AnalyzeButton" Style="{StaticResource PrimaryButton}" Margin="0,12,0,0" Padding="16,12" Click="Analyze_Click"
+                        FontSize="14.5">
+                    <TextBlock x:Name="AnalyzeText" Text="Analysieren" />
+                </Button>
+            </Grid>
+
+            <!-- Rechte Spalte: Ergebnis -->
+            <Grid Grid.Column="2">
+                <!-- Startzustand -->
+                <Border x:Name="EmptyState" Style="{StaticResource Card}" Padding="28">
+                    <StackPanel MaxWidth="560" HorizontalAlignment="Left">
+                        <TextBlock Text="So findest du die Ursache" Style="{StaticResource H1}" />
+                        <Grid Margin="0,22,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="36" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+                            <TextBlock Text="1" Style="{StaticResource H2}" Foreground="{StaticResource AccentBrush}" FontSize="18" />
+                            <StackPanel Grid.Column="1" Margin="0,0,0,18">
+                                <TextBlock Text="Crash-Fenster kopieren" Style="{StaticResource H2}" />
+                                <TextBlock Style="{StaticResource Muted}" Margin="0,4,0,0"
+                                           Text="Wenn FiveM abstürzt, erscheint ein Fenster mit „Crash signature“. Klick hinein, drück Strg+C und füge den Text links ein." />
+                            </StackPanel>
+                            <TextBlock Grid.Row="1" Text="2" Style="{StaticResource H2}" Foreground="{StaticResource AccentBrush}" FontSize="18" />
+                            <StackPanel Grid.Row="1" Grid.Column="1" Margin="0,0,0,18">
+                                <TextBlock Text="Dump dazulegen" Style="{StaticResource H2}" />
+                                <TextBlock Style="{StaticResource Muted}" Margin="0,4,0,0"
+                                           Text="„Neuesten Crash laden“ holt den Dump automatisch aus dem FiveM-Ordner. Er zeigt, welche Programme im Spiel steckten und wie lange es lief." />
+                            </StackPanel>
+                            <TextBlock Grid.Row="2" Text="3" Style="{StaticResource H2}" Foreground="{StaticResource AccentBrush}" FontSize="18" />
+                            <StackPanel Grid.Row="2" Grid.Column="1">
+                                <TextBlock Text="Analysieren und beheben" Style="{StaticResource H2}" />
+                                <TextBlock Style="{StaticResource Muted}" Margin="0,4,0,0"
+                                           Text="Du bekommst die wahrscheinlichsten Ursachen mit Schritten. Vieles erledigt das Tool per Knopfdruck – es fragt vorher und zeigt genau, was passiert." />
+                            </StackPanel>
+                        </Grid>
+                        <Border Background="{StaticResource Surface2Brush}" CornerRadius="8" Padding="14,10" Margin="0,24,0,0">
+                            <TextBlock Style="{StaticResource Muted}"
+                                       Text="Alles bleibt auf deinem PC. Das Tool lädt nichts hoch. Ohne Eingabe prüft „Analysieren“ nur dein System." />
+                        </Border>
+                        <TextBlock Style="{StaticResource Muted}" Foreground="{StaticResource FaintBrush}" Margin="0,16,0,0" FontSize="11.5"
+                                   Text="Inoffizielles Werkzeug, nicht mit Cfx.re oder Rockstar Games verbunden." />
+                    </StackPanel>
+                </Border>
+
+                <!-- Ergebnis -->
+                <Grid x:Name="ResultState" Visibility="Collapsed">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+
+                    <Border Style="{StaticResource Card}" Padding="20,16">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel>
+                                <TextBlock x:Name="HeadlineLabel" Text="WAHRSCHEINLICHSTE URSACHE" Style="{StaticResource Label}" />
+                                <TextBlock x:Name="Headline" Style="{StaticResource H1}" Margin="0,4,0,0" />
+                                <TextBlock x:Name="HeadlineSub" Style="{StaticResource Muted}" Margin="0,4,0,0" />
+                                <WrapPanel x:Name="FactChips" Margin="0,10,0,0" />
+                            </StackPanel>
+                            <Button Grid.Column="1" Style="{StaticResource SecondaryButton}" VerticalAlignment="Top" Click="CopyDiscord_Click" Padding="12,6" Margin="12,0,0,0"
+                                    ToolTip="Kurzfassung für Discord oder das Server-Team (ohne deinen Windows-Benutzernamen)">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="&#xE8C8;" Style="{StaticResource Icon}" Margin="0,0,8,0" />
+                                    <TextBlock Text="Für Discord kopieren" />
+                                </StackPanel>
+                            </Button>
+                        </Grid>
+                    </Border>
+
+                    <TabControl Grid.Row="1" x:Name="Tabs" Margin="0,8,0,0">
+                        <TabItem x:Name="DiagnosisTab" Header="Diagnose">
+                            <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="0,0,6,0">
+                                <StackPanel>
+                                    <ItemsControl x:Name="DiagnosisList" ItemTemplate="{StaticResource DiagnosisTemplate}" />
+                                    <TextBlock x:Name="NoDiagnosis" Style="{StaticResource Muted}" Visibility="Collapsed" Margin="4,8"
+                                               Text="Keine Auffälligkeiten gefunden." />
+                                </StackPanel>
+                            </ScrollViewer>
+                        </TabItem>
+                        <TabItem Header="Technische Details">
+                            <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="0,0,6,0">
+                                <StackPanel x:Name="DetailsPanel" />
+                            </ScrollViewer>
+                        </TabItem>
+                        <TabItem Header="System">
+                            <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="0,0,6,0">
+                                <StackPanel>
+                                    <Border Style="{StaticResource Card}">
+                                        <StackPanel>
+                                            <ItemsControl x:Name="SystemList" ItemTemplate="{StaticResource KeyValueTemplate}" />
+                                            <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                                <Button Style="{StaticResource SecondaryButton}" Click="ChooseFiveM_Click" Padding="12,6">
+                                                    <StackPanel Orientation="Horizontal">
+                                                        <TextBlock Text="&#xE8B7;" Style="{StaticResource Icon}" Margin="0,0,8,0" />
+                                                        <TextBlock Text="FiveM-Ordner wählen …" />
+                                                    </StackPanel>
+                                                </Button>
+                                                <Button Style="{StaticResource GhostButton}" Click="OpenCrashes_Click" Margin="6,0,0,0">
+                                                    <TextBlock Text="Crash-Ordner öffnen" />
+                                                </Button>
+                                                <Button Style="{StaticResource GhostButton}" Click="OpenLog_Click" Margin="6,0,0,0">
+                                                    <TextBlock Text="Tool-Protokoll" />
+                                                </Button>
+                                            </StackPanel>
+                                        </StackPanel>
+                                    </Border>
+                                    <TextBlock x:Name="CollectErrors" Style="{StaticResource Muted}" Foreground="{StaticResource FaintBrush}" Margin="4,10,0,0" Visibility="Collapsed" />
+                                </StackPanel>
+                            </ScrollViewer>
+                        </TabItem>
+                        <TabItem Header="Bericht">
+                            <Grid>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="*" />
+                                </Grid.RowDefinitions>
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                                    <Button Style="{StaticResource SecondaryButton}" Click="CopyMarkdown_Click" Padding="12,6">
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="&#xE8C8;" Style="{StaticResource Icon}" Margin="0,0,8,0" />
+                                            <TextBlock Text="Bericht kopieren" />
+                                        </StackPanel>
+                                    </Button>
+                                    <Button Style="{StaticResource SecondaryButton}" Click="CopyDiscord_Click" Padding="12,6" Margin="8,0,0,0">
+                                        <TextBlock Text="Kurzfassung für Discord" />
+                                    </Button>
+                                    <Button Style="{StaticResource SecondaryButton}" Click="SupportZip_Click" Padding="12,6" Margin="8,0,0,0">
+                                        <TextBlock Text="Support-Paket (ZIP)" />
+                                    </Button>
+                                </StackPanel>
+                                <TextBox Grid.Row="1" x:Name="ReportText" IsReadOnly="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto"
+                                         FontFamily="{StaticResource MonoFont}" FontSize="12" Background="{StaticResource SurfaceBrush}" />
+                            </Grid>
+                        </TabItem>
+                    </TabControl>
+                </Grid>
+
+                <!-- Meldung unten -->
+                <Border x:Name="Toast" Visibility="Collapsed" VerticalAlignment="Bottom" HorizontalAlignment="Center" Margin="0,0,0,8"
+                        Background="{StaticResource Surface3Brush}" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="8" Padding="14,8">
+                    <TextBlock x:Name="ToastText" />
+                </Border>
+            </Grid>
+        </Grid>
+    </Grid>
+</Window>

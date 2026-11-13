@@ -1,0 +1,61 @@
+name: Release
+
+# Auslöser: annotierter Tag vX.Y.Z (git tag -a v1.0.0 -F notes.txt && git push origin v1.0.0).
+# Titel = erste Zeile der Tag-Nachricht, Text = der Rest.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Tag muss zur Version im Projekt passen
+        shell: pwsh
+        run: |
+          [xml]$proj = Get-Content src/CrashDoctor/CrashDoctor.csproj
+          $version = ($proj.Project.PropertyGroup | Where-Object { $_.Version } | Select-Object -First 1).Version
+          $tag = "${{ github.ref_name }}".TrimStart('v')
+          if ($version -ne $tag) { throw "Tag v$tag passt nicht zur <Version>$version</Version> in CrashDoctor.csproj" }
+
+      - name: Tests
+        run: dotnet test tests/CrashDoctor.Tests/CrashDoctor.Tests.csproj -c Release
+
+      - name: Build
+        run: dotnet build src/CrashDoctor/CrashDoctor.csproj -c Release
+
+      - name: Dateien und Prüfsumme
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force dist | Out-Null
+          Copy-Item src/CrashDoctor/bin/Release/net48/FiveMCrashDoctor.exe dist/
+          $hash = (Get-FileHash dist/FiveMCrashDoctor.exe -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  FiveMCrashDoctor.exe" | Set-Content -NoNewline -Encoding ascii dist/FiveMCrashDoctor.exe.sha256
+          if ((Get-Item dist/FiveMCrashDoctor.exe).Length -lt 100kb) { throw "EXE ist unplausibel klein" }
+
+      - name: Release-Text aus der Tag-Nachricht
+        shell: pwsh
+        run: |
+          $msg = git tag -l --format='%(contents)' "${{ github.ref_name }}"
+          $lines = $msg -split "`n"
+          "TITLE=$($lines[0])" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+          ($lines | Select-Object -Skip 1) -join "`n" | Set-Content -Encoding utf8 notes.md
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ env.TITLE }}
+          body_path: notes.md
+          files: |
+            dist/FiveMCrashDoctor.exe
+            dist/FiveMCrashDoctor.exe.sha256

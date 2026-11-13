@@ -1,0 +1,31 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Tests
+        run: dotnet test tests/CrashDoctor.Tests/CrashDoctor.Tests.csproj -c Release --logger "console;verbosity=normal"
+
+      - name: Build
+        run: dotnet build src/CrashDoctor/CrashDoctor.csproj -c Release
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: FiveMCrashDoctor
+          path: src/CrashDoctor/bin/Release/net48/FiveMCrashDoctor.exe
+          if-no-files-found: error
