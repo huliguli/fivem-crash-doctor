@@ -47,8 +47,12 @@ jobs:
       - name: Release-Text aus der Tag-Nachricht
         shell: pwsh
         run: |
-          $msg = git tag -l --format='%(contents)' "${{ github.ref_name }}"
-          $lines = $msg -split "`n"
+          # actions/checkout legt den Tag beim Tag-Lauf ohne Nachricht an (leichtgewichtig) –
+          # dann liefert %(contents) die COMMIT-Nachricht. Deshalb den echten Tag nachholen und prüfen.
+          $tag = "${{ github.ref_name }}"
+          git fetch --force origin "refs/tags/${tag}:refs/tags/${tag}"
+          if ((git cat-file -t $tag) -ne 'tag') { throw "Tag $tag ist nicht annotiert – bitte mit git tag -a $tag -F notes.txt anlegen" }
+          $lines = @(git tag -l --format='%(contents)' $tag)
           "TITLE=$($lines[0])" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
           ($lines | Select-Object -Skip 1) -join "`n" | Set-Content -Encoding utf8 notes.md
 
