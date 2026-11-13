@@ -1,4 +1,4 @@
-# Erzeugt src/CrashDoctor/Assets/app.ico (16/24/32/48/64/256 px, PNG-Einträge) mit System.Drawing.
+﻿# Erzeugt src/CrashDoctor/Assets/app.ico (16/24/32/48/64/256 px, PNG-Einträge) mit System.Drawing.
 param([string]$Out = (Join-Path $PSScriptRoot '..\src\CrashDoctor\Assets\app.ico'))
 Add-Type -AssemblyName System.Drawing
 $sizes = 16, 24, 32, 48, 64, 256

@@ -35,6 +35,57 @@ jobs:
       - name: Build
         run: dotnet build src/CrashDoctor/CrashDoctor.csproj -c Release
 
+      # Ohne Signatur kein Release: der Updater installiert nur EXEs mit dem gepinnten Zertifikat.
+      # Windows PowerShell 5.1, weil dort Set-AuthenticodeSignature sicher verfügbar ist; das geerbte
+      # PSModulePath von PowerShell 7 würde das Sicherheitsmodul blockieren (DESKTOP-APPS/GOTCHAS).
+      - name: Signieren
+        shell: powershell
+        env:
+          PFX_B64: ${{ secrets.CODESIGN_PFX_BASE64 }}
+          PFX_PASSWORD: ${{ secrets.CODESIGN_PFX_PASSWORD }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $env:PSModulePath = [Environment]::GetEnvironmentVariable('PSModulePath', 'Machine')
+          Import-Module Microsoft.PowerShell.Security
+          if (-not $env:PFX_B64 -or -not $env:PFX_PASSWORD) { throw 'Signatur-Secrets fehlen - ein unsigniertes Release wuerde die Auto-Updates aller Nutzer stoppen.' }
+          $exe = 'src/CrashDoctor/bin/Release/net48/FiveMCrashDoctor.exe'
+          $pfx = Join-Path $env:RUNNER_TEMP 'codesign.pfx'
+          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:PFX_B64))
+          try {
+            $cert = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2($pfx, $env:PFX_PASSWORD)
+            $done = $false
+            foreach ($ts in @('http://timestamp.digicert.com', 'http://timestamp.sectigo.com', 'http://timestamp.globalsign.com/tsa/r6advanced1')) {
+              try {
+                $r = Set-AuthenticodeSignature -FilePath $exe -Certificate $cert -HashAlgorithm SHA256 -TimestampServer $ts
+                if (($r.Status -eq 'Valid' -or $r.Status -eq 'UnknownError') -and $r.TimeStamperCertificate) { $done = $true; Write-Host "Signiert, Zeitstempel: $ts"; break }
+                Write-Warning "Zeitstempel ${ts}: $($r.Status) $($r.StatusMessage)"
+              } catch { Write-Warning "Zeitstempel ${ts}: $_" }
+            }
+            if (-not $done) { throw 'Signieren fehlgeschlagen (kein Zeitstempel-Server erreichbar).' }
+          } finally { Remove-Item $pfx -Force -ErrorAction SilentlyContinue }
+
+      - name: Signatur gegen den Pin im Quellcode prüfen
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $env:PSModulePath = [Environment]::GetEnvironmentVariable('PSModulePath', 'Machine')
+          Import-Module Microsoft.PowerShell.Security
+          $line = Get-Content src/CrashDoctor/Platform/Updater.cs | Where-Object { $_ -match 'TrustedThumbprints\s*=' }
+          $pins = @([regex]::Matches(($line -join ' '), '[0-9A-Fa-f]{40}') | ForEach-Object { $_.Value.ToUpperInvariant() })
+          if ($pins.Count -eq 0) { throw 'Kein Thumbprint in Updater.cs gefunden.' }
+          $sig = Get-AuthenticodeSignature src/CrashDoctor/bin/Release/net48/FiveMCrashDoctor.exe
+          if ($sig.Status -ne 'Valid' -and $sig.Status -ne 'UnknownError') { throw "Signatur ungueltig: $($sig.Status) $($sig.StatusMessage)" }
+          if ($pins -notcontains $sig.SignerCertificate.Thumbprint) { throw "Signer $($sig.SignerCertificate.Thumbprint) ist nicht gepinnt: $($pins -join ', ')" }
+          Write-Host "Signatur passt zum Pin $($sig.SignerCertificate.Thumbprint)"
+
+      - name: Probelauf der gebauten EXE
+        shell: pwsh
+        run: |
+          $out = Join-Path $env:RUNNER_TEMP 'smoke.md'
+          $p = Start-Process src/CrashDoctor/bin/Release/net48/FiveMCrashDoctor.exe -ArgumentList '--report', $out -Wait -PassThru
+          if ($p.ExitCode -ne 0 -or -not (Test-Path $out) -or (Get-Item $out).Length -lt 200) { throw "Probelauf fehlgeschlagen (Exit $($p.ExitCode))" }
+          Get-Content $out -TotalCount 5
+
       - name: Dateien und Prüfsumme
         shell: pwsh
         run: |
@@ -56,10 +107,25 @@ jobs:
           "TITLE=$($lines[0])" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
           ($lines | Select-Object -Skip 1) -join "`n" | Set-Content -Encoding utf8 notes.md
 
+      # Atomar: erst Entwurf mit allen Dateien, dann veröffentlichen – releases/latest zeigt nie ein halbes Release
       - uses: softprops/action-gh-release@v2
         with:
           name: ${{ env.TITLE }}
           body_path: notes.md
+          draft: true
           files: |
             dist/FiveMCrashDoctor.exe
             dist/FiveMCrashDoctor.exe.sha256
+
+      - name: Veröffentlichen, wenn beide Dateien da sind
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = "${{ github.ref_name }}"
+          $assets = gh release view $tag --json assets --jq '.assets[] | "\(.name) \(.size)"'
+          foreach ($name in 'FiveMCrashDoctor.exe', 'FiveMCrashDoctor.exe.sha256') {
+            $hit = $assets | Where-Object { $_ -match "^$([regex]::Escape($name)) (\d+)$" -and [int64]$Matches[1] -gt 0 }
+            if (-not $hit) { throw "Datei $name fehlt im Entwurf" }
+          }
+          gh release edit $tag --draft=false --latest

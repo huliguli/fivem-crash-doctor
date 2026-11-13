@@ -118,8 +118,34 @@
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
+
+        <!-- Update-Hinweis -->
+        <Border x:Name="UpdateBanner" Grid.Row="1" Visibility="Collapsed" Background="{StaticResource AccentSoftBrush}"
+                BorderBrush="#2C5A44" BorderThickness="0,0,0,1" Padding="20,10">
+            <DockPanel>
+                <StackPanel x:Name="UpdateButtons" DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center" Margin="16,0,0,0">
+                    <Button x:Name="UpdateNowButton" Style="{StaticResource PrimaryButton}" Padding="12,6" Click="UpdateNow_Click">
+                        <TextBlock Text="Jetzt aktualisieren" />
+                    </Button>
+                    <Button x:Name="UpdateLaterButton" Style="{StaticResource GhostButton}" Margin="6,0,0,0" Click="UpdateLater_Click">
+                        <TextBlock Text="Später" />
+                    </Button>
+                    <Button x:Name="UpdateSkipButton" Style="{StaticResource GhostButton}" Click="UpdateSkip_Click">
+                        <TextBlock Text="Überspringen" />
+                    </Button>
+                    <Button Style="{StaticResource GhostButton}" Click="UpdatePage_Click">
+                        <TextBlock Text="Was ist neu?" />
+                    </Button>
+                </StackPanel>
+                <StackPanel VerticalAlignment="Center">
+                    <TextBlock x:Name="UpdateTitle" FontWeight="SemiBold" Foreground="{StaticResource AccentBrush}" FontSize="13.5" />
+                    <TextBlock x:Name="UpdateNotes" Style="{StaticResource Muted}" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" />
+                </StackPanel>
+            </DockPanel>
+        </Border>
 
         <!-- Kopfzeile -->
         <Border BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1" Padding="20,12">
@@ -135,6 +161,10 @@
                     </StackPanel>
                 </StackPanel>
                 <StackPanel Orientation="Horizontal" DockPanel.Dock="Right" VerticalAlignment="Center">
+                    <Button x:Name="VersionButton" Style="{StaticResource GhostButton}" Margin="0,0,8,0" Click="UpdateSettings_Click"
+                            ToolTip="Version und Update-Einstellungen">
+                        <TextBlock x:Name="VersionText" FontSize="12" />
+                    </Button>
                     <Border x:Name="AdminChip" Style="{StaticResource Pill}" Background="{StaticResource Surface2Brush}" Padding="10,4">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock x:Name="AdminIcon" Text="&#xEA18;" Style="{StaticResource Icon}" FontSize="12" Foreground="{StaticResource FaintBrush}" />
@@ -149,7 +179,7 @@
             </DockPanel>
         </Border>
 
-        <Grid Grid.Row="1" Margin="20,16,20,16">
+        <Grid Grid.Row="2" Margin="20,16,20,16">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="400" />
                 <ColumnDefinition Width="20" />

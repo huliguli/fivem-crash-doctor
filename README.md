@@ -49,6 +49,8 @@ Jede Diagnose sagt, **wie belastbar** sie ist: *belegt* (FiveM-Quelltext oder of
 
 **Admin-Rechte:** Das Tool startet normal. Nur Reparaturen, die sie wirklich brauchen, fragen per UAC nach – und der erhöhte Prozess führt dann genau diese eine Reparatur aus. Wer will, kann oben rechts das ganze Tool als Admin neu starten.
 
+**Updates:** Das Tool prüft beim Start und stündlich, ob es eine neue Version gibt, und zeigt dann oben ein Banner: *Jetzt aktualisieren*, *Später* oder *Überspringen*. Ein Klick lädt die neue EXE, prüft sie und startet sie neu. Wer will, lässt Updates beim Start automatisch installieren (Version oben rechts anklicken). Installiert wird nur eine Datei, deren SHA-256-Prüfsumme stimmt **und** die mit dem Zertifikat des Projekts signiert ist – sonst wird der Download verworfen.
+
 **Teilen:** „Für Discord kopieren“ erzeugt eine Kurzfassung unter 2000 Zeichen, „Bericht kopieren“ den vollen Bericht als Markdown. Dein Windows-Benutzername wird dabei entfernt.
 
 ## Installation
@@ -76,11 +78,12 @@ Ohne Fenster, z. B. für Skripte:
 ```powershell
 FiveMCrashDoctor.exe --report bericht.md --latest
 FiveMCrashDoctor.exe --report bericht.md --text crash.txt C:\Pfad\zum\dump.dmp
+FiveMCrashDoctor.exe --update
 ```
 
 ## Datenschutz
 
-Alles läuft lokal. Das Tool lädt nichts hoch, hat keine Telemetrie und öffnet nur dann eine Webseite, wenn du einen der Link-Knöpfe drückst. Spieler-Kennungen aus `crashometry.json` (z. B. die Rockstar-ID) werden verworfen. Ein eigenes Protokoll liegt unter `%LOCALAPPDATA%\FiveMCrashDoctor\logs`.
+Alles läuft lokal. Das Tool lädt nichts hoch und hat keine Telemetrie. Ins Netz geht es nur für die Update-Prüfung (eine Anfrage an `api.github.com` ohne Daten von dir, abschaltbar über die Versionsnummer oben rechts) und wenn du einen der Link-Knöpfe drückst. Spieler-Kennungen aus `crashometry.json` (z. B. die Rockstar-ID) werden verworfen. Ein eigenes Protokoll liegt unter `%LOCALAPPDATA%\FiveMCrashDoctor\logs`.
 
 Dumps und Logs, die du teilst, können Server- und Spielernamen und Teile des Spielspeichers enthalten – teile sie nur mit Leuten, denen du vertraust.
 
@@ -103,6 +106,16 @@ Die EXE liegt danach unter `src/CrashDoctor/bin/Release/net48/FiveMCrashDoctor.e
 | `src/CrashDoctor/Platform` | Windows-Schicht: FiveM finden, PC messen, Reparaturen, Admin-Hilfsprozess |
 | `src/CrashDoctor/UI`, `MainWindow.xaml` | Oberfläche (WPF) |
 | `tests/CrashDoctor.Tests` | xUnit-Tests mit nachgebauten Minidumps und einer Schein-FiveM-Installation |
+
+### Release veröffentlichen
+
+1. `<Version>` in `src/CrashDoctor/CrashDoctor.csproj` hochziehen, committen, pushen, CI grün abwarten.
+2. Release-Text in eine Datei schreiben (erste Zeile = Titel), dann `git tag -a vX.Y.Z -F notes.txt` und `git push origin vX.Y.Z`.
+3. Der Workflow prüft Tag gegen Version, testet, baut, **signiert** (Secrets `CODESIGN_PFX_BASE64`, `CODESIGN_PFX_PASSWORD`), prüft die Signatur gegen den Pin in `Platform/Updater.cs`, macht einen Probelauf und veröffentlicht erst, wenn EXE und Prüfsumme im Entwurf liegen.
+
+Ein kaputtes Release zurückrufen: `gh release edit vX.Y.Z --prerelease` – dann bietet der Updater wieder die Vorgängerversion an (Dateien nicht löschen). Zertifikatswechsel: den neuen Thumbprint **zusätzlich** in `TrustedThumbprints` eintragen, im selben Release, das erstmals damit signiert ist.
+
+Updates erreichen andere Leute nur, wenn das Repo öffentlich ist – Releases privater Repos sieht GitHub nur angemeldeten Personen mit Zugriff.
 
 ### Wissensbasis erweitern
 

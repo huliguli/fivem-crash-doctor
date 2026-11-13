@@ -31,7 +31,13 @@ namespace CrashDoctor
         string _fiveMOverride;
         bool _busy;
 
-        static string SettingsFile => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "FiveMCrashDoctor", "settings.ini");
+        // Auto-Update (Bauplan: DESKTOP-APPS-LIBRARY/AUTO-UPDATE.md)
+        AppSettings _settings = new AppSettings();
+        IUpdateFeed _feed;
+        UpdateOffer _offer;
+        bool _updateFlowActive;
+        readonly HashSet<string> _dismissedThisSession = new HashSet<string>();
+        readonly DispatcherTimer _updateTimer = new DispatcherTimer { Interval = TimeSpan.FromHours(1) };
 
         public MainWindow(string[] args)
         {
@@ -42,6 +48,9 @@ namespace CrashDoctor
             _toastTimer.Tick += (s, e) => { _toastTimer.Stop(); Toast.Visibility = Visibility.Collapsed; };
             LoadSettings();
             Title = $"FiveM Crash Doctor {AppLog.Version}";
+            VersionText.Text = "v" + Updater.CurrentVersion;
+            _feed = App.UpdateFeedFromArgs(_args);
+            _updateTimer.Tick += async (s, e) => await CheckForUpdateAsync(manual: false, startup: false);
 
             if (SystemCollector.IsElevated())
             {
@@ -86,6 +95,18 @@ namespace CrashDoctor
             if (HasArg("--demo")) CrashText.Text = DemoText;
 
             var shot = ArgValue("--screenshot");
+            if (shot == null)
+            {
+                var from = ArgValue("--updated");
+                if (from != null) ShowToast($"Aktualisiert auf Version {Updater.CurrentVersion} (vorher {from}).");
+                _updateTimer.Start();
+                _ = CheckForUpdateAsync(manual: false, startup: true);
+            }
+            else if (HasArg("--demo-update"))
+            {
+                ShowUpdateBanner(new UpdateOffer { Release = new ReleaseInfo { Version = new Version(1, 2, 0), Notes = "Neue Regeln für ERR_GFX-Fehler\nSchnellere Dump-Analyse" } });
+            }
+
             if (shot != null)
             {
                 var size = ArgValue("--size");
@@ -549,25 +570,123 @@ You can press Ctrl-C to copy this message and paste it elsewhere.";
 
         void LoadSettings()
         {
-            try
-            {
-                if (!File.Exists(SettingsFile)) return;
-                foreach (var line in File.ReadAllLines(SettingsFile))
-                    if (line.StartsWith("fivem=")) _fiveMOverride = line.Substring(6).Trim();
-            }
-            catch (IOException) { }
-            catch (UnauthorizedAccessException) { }
+            _settings = AppSettings.Load();
+            _fiveMOverride = _settings.FiveMDir;
         }
 
         void SaveSettings()
         {
+            _settings.FiveMDir = _fiveMOverride;
+            _settings.Save();
+        }
+
+        // ------------------------------------------------------------------ Auto-Update
+
+        /// <summary>Prüft im Hintergrund. Beim Start mit „automatisch installieren“ läuft das Update ohne Rückfrage.</summary>
+        async Task<UpdateCheckResult> CheckForUpdateAsync(bool manual, bool startup)
+        {
+            if (_updateFlowActive) return null;
+            var feed = _feed;
+            var settings = _settings;
+            var result = await Task.Run(() => Updater.Check(feed, settings, manual));
+            _settings.Save();
+            if (result.Status != UpdateStatus.Available) return result;
+
+            var version = result.Offer.Version.ToString();
+            if (!manual && _dismissedThisSession.Contains(version)) return result;
+            if (startup && _settings.UpdateAutoInstall && !_busy && !Updater.IsDevBuild(Updater.CurrentExePath))
+            {
+                ShowUpdateBanner(result.Offer);
+                await InstallUpdateAsync();
+            }
+            else
+            {
+                ShowUpdateBanner(result.Offer);
+            }
+            return result;
+        }
+
+        void ShowUpdateBanner(UpdateOffer offer)
+        {
+            _offer = offer;
+            UpdateTitle.Text = $"Update auf Version {offer.Version} verfügbar";
+            UpdateNotes.Text = UpdateLogic.NotesPreview(offer.Release.Notes, 1);
+            UpdateNotes.Foreground = (Brush)FindResource("MutedBrush");
+            UpdateNowButton.IsEnabled = true;
+            UpdateLaterButton.IsEnabled = UpdateSkipButton.IsEnabled = true;
+            UpdateBanner.Visibility = Visibility.Visible;
+        }
+
+        async Task InstallUpdateAsync()
+        {
+            if (_offer == null || _updateFlowActive) return;
+            var exe = Updater.CurrentExePath;
+            if (Updater.IsDevBuild(exe))
+            {
+                UpdateNotes.Text = "Entwickler-Build: Hier tauscht sich das Tool nicht selbst aus. Lade das Update über „Was ist neu?“.";
+                return;
+            }
+            if (_busy)
+            {
+                UpdateNotes.Text = "Bitte warte, bis die Analyse fertig ist.";
+                return;
+            }
+            _updateFlowActive = true;
+            UpdateNowButton.IsEnabled = UpdateLaterButton.IsEnabled = UpdateSkipButton.IsEnabled = false;
+            var offer = _offer;
+            var feed = _feed;
             try
             {
-                Directory.CreateDirectory(Path.GetDirectoryName(SettingsFile));
-                File.WriteAllLines(SettingsFile, new[] { "fivem=" + (_fiveMOverride ?? "") });
+                var verified = await Task.Run(() => Updater.DownloadAndVerify(feed, offer, exe,
+                    msg => Dispatcher.BeginInvoke(new Action(() => UpdateNotes.Text = msg)), System.Threading.CancellationToken.None));
+                UpdateNotes.Text = "Starte neu …";
+                Updater.Swap(exe, verified);
+                Updater.Relaunch(exe, Updater.CurrentVersion);
+                Application.Current.Shutdown();
             }
-            catch (IOException) { }
-            catch (UnauthorizedAccessException) { }
+            catch (Exception ex) when (ex is UpdateException || ex is IOException || ex is UnauthorizedAccessException || ex is System.Net.WebException)
+            {
+                AppLog.Write("Update fehlgeschlagen: " + ex);
+                UpdateNotes.Text = "Update fehlgeschlagen: " + ex.Message;
+                UpdateNotes.Foreground = (Brush)FindResource("CriticalBrush");
+                UpdateNowButton.IsEnabled = UpdateLaterButton.IsEnabled = UpdateSkipButton.IsEnabled = true;
+            }
+            finally
+            {
+                _updateFlowActive = false;
+            }
+        }
+
+        async void UpdateNow_Click(object sender, RoutedEventArgs e) => await InstallUpdateAsync();
+
+        void UpdateLater_Click(object sender, RoutedEventArgs e)
+        {
+            if (_offer != null) _dismissedThisSession.Add(_offer.Version.ToString());
+            UpdateBanner.Visibility = Visibility.Collapsed;
+        }
+
+        void UpdateSkip_Click(object sender, RoutedEventArgs e)
+        {
+            if (_offer != null) { _settings.SkippedVersion = _offer.Version.ToString(); _settings.Save(); }
+            UpdateBanner.Visibility = Visibility.Collapsed;
+        }
+
+        void UpdatePage_Click(object sender, RoutedEventArgs e)
+        {
+            var url = _offer?.Release?.PageUrl;
+            if (string.IsNullOrEmpty(url) || !UpdateLogic.IsAllowedHost(new Uri(url))) url = GitHubFeed.ReleasesPage;
+            Process.Start(new ProcessStartInfo(url) { UseShellExecute = true })?.Dispose();
+        }
+
+        void UpdateSettings_Click(object sender, RoutedEventArgs e)
+        {
+            UpdateSettingsWindow.Show(_settings, async () =>
+            {
+                var r = await CheckForUpdateAsync(manual: true, startup: false);
+                return r?.Message ?? "Ein Update läuft bereits.";
+            });
+            _settings.Save();
+            if (_settings.UpdateCheck) _updateTimer.Start(); else _updateTimer.Stop();
         }
 
         bool HasArg(string name) => _args.Any(a => string.Equals(a, name, StringComparison.OrdinalIgnoreCase));

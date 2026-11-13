@@ -34,13 +34,52 @@ namespace CrashDoctor
                 return;
             }
 
+            // Ohne Fenster aktualisieren: FiveMCrashDoctor.exe --update [--update-feed <ordner>]
+            if (args.Contains("--update"))
+            {
+                ShutdownMode = ShutdownMode.OnExplicitShutdown;
+                Shutdown(RunHeadlessUpdate(args));
+                return;
+            }
+
             AppLog.Start(args.Contains("--screenshot") ? "Bildschirmfoto" : "Oberfläche");
+            try { Updater.CleanupLeftovers(Updater.CurrentExePath); } catch (Exception ex) { AppLog.Write("Aufräumen nach Update: " + ex.Message); }
             DispatcherUnhandledException += OnDispatcherException;
             AppDomain.CurrentDomain.UnhandledException += (s, ev) => AppLog.Write("Unbehandelter Fehler: " + ev.ExceptionObject);
 
             var window = new MainWindow(args);
             MainWindow = window;
             window.Show();
+        }
+
+        /// <summary>0 = aktualisiert, 1 = schon aktuell, 2 = Fehler.</summary>
+        static int RunHeadlessUpdate(string[] args)
+        {
+            AppLog.Start("Update ohne Fenster");
+            try
+            {
+                var feed = UpdateFeedFromArgs(args);
+                var settings = AppSettings.Load();
+                var result = Updater.Check(feed, settings, manual: true);
+                settings.Save();
+                AppLog.Write("Update-Prüfung: " + result.Status + " – " + result.Message);
+                if (result.Status != UpdateStatus.Available) return result.Status == UpdateStatus.UpToDate ? 1 : 2;
+                var exe = Updater.CurrentExePath;
+                var verified = Updater.DownloadAndVerify(feed, result.Offer, exe, s => { }, System.Threading.CancellationToken.None);
+                Updater.Swap(exe, verified);
+                return 0;
+            }
+            catch (Exception ex)
+            {
+                AppLog.Write("Update fehlgeschlagen: " + ex.Message);
+                return 2;
+            }
+        }
+
+        public static IUpdateFeed UpdateFeedFromArgs(string[] args)
+        {
+            int i = Array.IndexOf(args, "--update-feed");
+            return i >= 0 && i + 1 < args.Length ? (IUpdateFeed)new FolderFeed(args[i + 1]) : new GitHubFeed();
         }
 
         static int RunHeadlessReport(string[] args, string output)

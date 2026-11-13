@@ -7,3 +7,4 @@ dist/
 TestResults/
 *.dmp
 !tests/**/*.dmp
+cert/
